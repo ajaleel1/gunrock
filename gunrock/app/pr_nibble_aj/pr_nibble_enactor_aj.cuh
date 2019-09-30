@@ -159,11 +159,11 @@ struct PRNibbleIterationLoop
 
 
     printf("Calling Advance/Filter (mode: %s) -- Frontier Size: %d\n", oprtr_parameters.advance_mode.c_str(), frontier.queue_length);
-//     GUARD_CU(oprtr::Advance<oprtr::OprtrType_V2V>(
-//                  graph.csr(), frontier.V_Q(), frontier.Next_V_Q(), oprtr_parameters,
-//                  advance_op));
+    GUARD_CU(oprtr::Advance<oprtr::OprtrType_V2V>(
+                 graph.csr(), frontier.V_Q(), frontier.Next_V_Q(), oprtr_parameters,
+                 advance_op));
 
-//     printf("\tNew Frontier Size: %d\n", frontier.queue_length);
+    printf("\tNew Frontier Size: %d\n", frontier.queue_length);
 
 
 
