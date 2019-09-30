@@ -167,14 +167,14 @@ struct PRNibbleIterationLoop
 
 
 
-    GUARD_CU(oprtr::Advance<oprtr::OprtrType_V2V>(
-        graph.csr(), frontier.V_Q(), frontier.Next_V_Q(), oprtr_parameters,
-        advance_op, filter_op));
+//     GUARD_CU(oprtr::Advance<oprtr::OprtrType_V2V>(
+//         graph.csr(), frontier.V_Q(), frontier.Next_V_Q(), oprtr_parameters,
+//         advance_op, filter_op));
 
-//     frontier.queue_reset = false;
-//     GUARD_CU(oprtr::Filter<oprtr::OprtrType_V2V>(
-//                  graph.csr(), frontier.V_Q(), frontier.Next_V_Q(), oprtr_parameters,
-//                  filter_op));
+    frontier.queue_reset = false;
+    GUARD_CU(oprtr::Filter<oprtr::OprtrType_V2V>(
+                 graph.csr(), frontier.V_Q(), frontier.Next_V_Q(), oprtr_parameters,
+                 filter_op));
 
 
 //     util::Array1D<SizeT, VertexT> *null_frontier = NULL;
