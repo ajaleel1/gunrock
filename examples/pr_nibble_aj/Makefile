@@ -10,7 +10,7 @@
 #-------------------------------------------------------------------------------
 
 include ../BaseMakefile.mk
-ALGO = pr_nibble
+ALGO = pr_nibble_aj
 EXEC = bin/test_$(ALGO)_$(NVCC_VERSION)_$(ARCH_SUFFIX)
 
 test: $(EXEC)
