@@ -114,10 +114,6 @@ struct PRNibbleIterationLoop
     };
     
 
-    // printf("Doing Compute -- Frontier Size: %d\n", frontier.queue_length);
-    GUARD_CU(frontier.V_Q()->ForAll(compute_op, frontier.queue_length,
-                                    util::DEVICE, oprtr_parameters.stream));
-
 
     // advance operation
     auto advance_op =
@@ -155,25 +151,38 @@ struct PRNibbleIterationLoop
         return false; 
     };
 
-
-    // printf("Calling Advance/Filter (mode: %s) -- Frontier Size: %d\n", oprtr_parameters.advance_mode.c_str(), frontier.queue_length);
+    // printf("Doing Compute -- Frontier Size: %d\n", frontier.queue_length);
+    GUARD_CU(frontier.V_Q()->ForAll(compute_op, frontier.queue_length,
+                                    util::DEVICE, oprtr_parameters.stream));
 
     GUARD_CU(oprtr::Advance<oprtr::OprtrType_V2V>(
         graph.csr(), frontier.V_Q(), frontier.Next_V_Q(), oprtr_parameters,
-        advance_op, filter_op));
+        advance_op));
+            
+    // printf("After Advance -- Frontier Size: %d\n", frontier.queue_length);
+    
+    frontier.queue_length = graph.nodes;
+    GUARD_CU(frontier.V_Q()->ForAll(
+                [] __host__ __device__(VertexT * v, const SizeT &i) {
+                  v[i] = i;
+                },
+                frontier.queue_length, util::DEVICE, oprtr_parameters.stream));
+    
+    // printf("Populate frontier -- Frontier Size: %d\n", frontier.queue_length);
 
-    // printf("\tNew Frontier Size: %d\n", frontier.queue_length);
-
-      // frontier.queue_reset = true;
-      // frontier.queue_length = graph.nodes;
-
-      GUARD_CU(oprtr::Filter<oprtr::OprtrType_V2V>(
+    frontier.queue_reset = true;
+    GUARD_CU(oprtr::Filter<oprtr::OprtrType_V2V>(
           graph.csr(), frontier.V_Q(), frontier.Next_V_Q(), oprtr_parameters,
           filter_op));
-
-      GUARD_CU(frontier.work_progress.GetQueueLength(
+    
+    // printf("Doing Filter -- Frontier Size: %d\n", frontier.queue_length);
+      
+    GUARD_CU(frontier.work_progress.GetQueueLength(
         frontier.queue_index, frontier.queue_length, false,
-        oprtr_parameters.stream, true));
+        oprtr_parameters.stream, false));
+
+    // printf("After GetQueueL -- Frontier Size: %d\n", frontier.queue_length);
+
     return retval;
   }
 
