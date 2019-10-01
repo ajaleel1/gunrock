@@ -99,11 +99,8 @@ cudaError_t RunTests(util::Parameters &parameters, GraphT &graph,
   ProblemT problem(parameters);
   EnactorT enactor;
 
-  printf("Initializing Problem\n");
   GUARD_CU(problem.Init(graph, target));
 
-
-  printf("Initializing Enactor\n");
   GUARD_CU(enactor.Init(problem, target));
 
   cpu_timer.Stop();
@@ -115,10 +112,8 @@ cudaError_t RunTests(util::Parameters &parameters, GraphT &graph,
     VertexT src_neib = graph.GetEdgeDest(graph.GetNeighborListOffset(src));
 
 
-    printf("Resetting Problem\n");
     GUARD_CU(problem.Reset(src, src_neib, target));
 
-    printf("Resetting Enactor\n");
     GUARD_CU(enactor.Reset(src, src_neib, target));
 
     util::PrintMsg("__________________________", !quiet_mode);

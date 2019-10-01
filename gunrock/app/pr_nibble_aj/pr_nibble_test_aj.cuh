@@ -179,8 +179,9 @@ typename GraphT::SizeT Validate_Results(util::Parameters &parameters,
       float err = abs(h_values[i] - ref_values[i]) / abs(ref_values[i]);
       if (err > tolerance) {
         num_errors++;
-        // printf("FAIL: [%d]:\t%0.17g != %0.17g\n",
-        //     i, h_values[i], ref_values[i]);
+	util::PrintMsg("FAIL: [" + std::to_string(i) + "] " + " " + 
+			std::to_string(h_values[i]) + " != " + 
+			std::to_string(ref_values[i]), !quiet);
       }
     }
   }

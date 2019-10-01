@@ -158,8 +158,6 @@ struct Problem : ProblemBase<_GraphT, _FLAG> {
       cudaError_t retval = cudaSuccess;
       SizeT nodes = this->sub_graph->nodes;
 
-      printf("Resetting Problem 1\n");
-
       src = _src;
       src_neib = _src_neib;
       num_ref_nodes = _num_ref_nodes;
@@ -179,7 +177,11 @@ struct Problem : ProblemBase<_GraphT, _FLAG> {
       GUARD_CU(residual_prime.ForEach([] __host__ __device__(ValueT & x) { x = (ValueT)0; },
                                       nodes, target, this->stream));
 
-
+      GUARD_CU(residual.ForAll([_src] __host__ __device__(ValueT * x, const SizeT &pos) { 
+			      x[_src] = (ValueT)1; }, 1, target, this->stream));
+      
+      GUARD_CU(residual_prime.ForAll([_src] __host__ __device__(ValueT * x, const SizeT &pos) { 
+			      x[_src] = (ValueT)1; }, 1, target, this->stream));
       return retval;
     }
   };  // DataSlice
@@ -252,7 +254,7 @@ struct Problem : ProblemBase<_GraphT, _FLAG> {
       if (target == util::DEVICE) {
         GUARD_CU(util::SetDevice(this->gpu_idx[0]));
 
-        GUARD_CU(data_slice.pageRank.SetPointer(h_pageRank, nodes, util::HOST));
+        GUARD_CU(data_slice.pageRank.SetPointer(h_values, nodes, util::HOST));
         GUARD_CU(data_slice.pageRank.Move(util::DEVICE, util::HOST));
 
         GUARD_CU(data_slice.residual.SetPointer(h_residual, nodes, util::HOST));
@@ -368,9 +370,6 @@ struct Problem : ProblemBase<_GraphT, _FLAG> {
   cudaError_t Reset(VertexT src, VertexT src_neib,
                     util::Location target = util::DEVICE) {
     cudaError_t retval = cudaSuccess;
-
-
-    printf("Resetting Problem 2\n");
 
     int num_ref_nodes = 1;
 

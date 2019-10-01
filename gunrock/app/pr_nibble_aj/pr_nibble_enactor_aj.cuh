@@ -63,8 +63,6 @@ struct PRNibbleIterationLoop
     // --
     // Alias variables
 
-      printf("In Core\n");
-
     auto &data_slice = this->enactor->problem->data_slices[this->gpu_num][0];
 
     auto &enactor_slice =
@@ -93,6 +91,9 @@ struct PRNibbleIterationLoop
 
     auto weight1 = data_slice.weight1;
     auto weight2 = data_slice.weight2;
+	
+    util::Array1D<SizeT, VertexT> *null_frontier = NULL;
+    auto complete_graph = null_frontier;
 
     // --
     // Define operations
@@ -101,9 +102,10 @@ struct PRNibbleIterationLoop
     auto compute_op = [graph, weight1, pageRank, residual, residual_prime ] __host__
                       __device__(VertexT * v, const SizeT &i) {
 
-        VertexT v_idx = v[i];
+        auto v_idx = v[i];
 
-        ValueT update_val = weight1 * Load<cub::LOAD_CG>(residual+v_idx); 
+        //ValueT update_val = weight1 * Load<cub::LOAD_CG>(residual+v_idx); 
+        auto update_val = weight1 * residual[v_idx]; 
         atomicAdd(pageRank+v_idx, update_val);
         
         residual_prime[v_idx] = 0;
@@ -112,7 +114,7 @@ struct PRNibbleIterationLoop
     };
     
 
-    printf("Doing Compute -- Frontier Size: %d\n", frontier.queue_length);
+    // printf("Doing Compute -- Frontier Size: %d\n", frontier.queue_length);
     GUARD_CU(frontier.V_Q()->ForAll(compute_op, frontier.queue_length,
                                     util::DEVICE, oprtr_parameters.stream));
 
@@ -125,12 +127,12 @@ struct PRNibbleIterationLoop
             SizeT &output_pos) -> bool {
 
         auto num_neighbors = graph.CsrT::GetNeighborListLength(src);
-        auto update_val  = weight2 * Load<cub::LOAD_CG>(residual+src) / num_neighbors;
-        atomicAdd( residual_prime + dest, update_val );
+        // auto update_val  = weight2 * Load<cub::LOAD_CG>(residual+src) / num_neighbors;
+        auto update_val  = weight2 * residual[src] / num_neighbors;
+        atomicAdd(residual_prime + dest, update_val);
 
-
-        printf("-- Advance -- Src: %d Dest: %d Num Neighbors: %d Update Val: %lf\n", src, dest, num_neighbors, update_val);
-        return true;
+        // printf("-- Advance -- Src: %d Dest: %d Num Neighbors: %d Update Val: %lf\n", src, dest, num_neighbors, update_val);
+	return true;
     };
 
     // filter operation
@@ -140,83 +142,41 @@ struct PRNibbleIterationLoop
                          const SizeT &input_pos,
                          SizeT &output_pos) -> bool { 
 
-        bool keep = false;
-        double num_neighbors = (double)graph.CsrT::GetNeighborListLength(dest);
-
+        auto num_neighbors = graph.CsrT::GetNeighborListLength(dest);
         residual[dest] = residual_prime[dest];
-
         double myepsilon = 1e-9;
-        double resval    = residual[dest];
 
-        if( num_neighbors && (resval >= (num_neighbors * myepsilon))) {
-            keep = true;
+        if(num_neighbors && ((double)residual[dest] >= (double)(num_neighbors * myepsilon))) {
+            return true;
         }
 
-        printf("-- Filter -- Src: %d Dest: %d input_pos: %d output_pos: %d Num Neighbors: %d residual: %lf epsilon: %lf Keep: %d\n", src, dest, input_pos, output_pos, num_neighbors, resval, myepsilon, (int)keep*1);
+        // printf("-- Filter -- Src: %d Dest: %d input_pos: %d output_pos: %d Num Neighbors: %d residual: %lf epsilon: %lf Keep: %d\n", src, dest, input_pos, output_pos, num_neighbors, residual[dest], myepsilon, 0);
         
-        return keep; 
+        return false; 
     };
 
 
-    printf("Calling Advance/Filter (mode: %s) -- Frontier Size: %d\n", oprtr_parameters.advance_mode.c_str(), frontier.queue_length);
+    // printf("Calling Advance/Filter (mode: %s) -- Frontier Size: %d\n", oprtr_parameters.advance_mode.c_str(), frontier.queue_length);
+
     GUARD_CU(oprtr::Advance<oprtr::OprtrType_V2V>(
-                 graph.csr(), frontier.V_Q(), frontier.Next_V_Q(), oprtr_parameters,
-                 advance_op));
+        graph.csr(), frontier.V_Q(), frontier.Next_V_Q(), oprtr_parameters,
+        advance_op, filter_op));
 
-    printf("\tNew Frontier Size: %d\n", frontier.queue_length);
+    // printf("\tNew Frontier Size: %d\n", frontier.queue_length);
 
+      // frontier.queue_reset = true;
+      // frontier.queue_length = graph.nodes;
 
+      GUARD_CU(oprtr::Filter<oprtr::OprtrType_V2V>(
+          graph.csr(), frontier.V_Q(), frontier.Next_V_Q(), oprtr_parameters,
+          filter_op));
 
-//     GUARD_CU(oprtr::Advance<oprtr::OprtrType_V2V>(
-//         graph.csr(), frontier.V_Q(), frontier.Next_V_Q(), oprtr_parameters,
-//         advance_op, filter_op));
-
-    frontier.queue_reset = false;
-    GUARD_CU(oprtr::Filter<oprtr::OprtrType_V2V>(
-                 graph.csr(), frontier.V_Q(), frontier.Next_V_Q(), oprtr_parameters,
-                 filter_op));
-
-
-//     util::Array1D<SizeT, VertexT> *null_frontier = NULL;
-//     auto complete_graph = null_frontier;
-// 
-//     frontier.queue_reset = true;
-//     GUARD_CU(oprtr::Filter<oprtr::OprtrType_V2V>(
-//                  graph.csr(), complete_graph, frontier.Next_V_Q(), oprtr_parameters,
-//                  filter_op));
-// 
-// 
-//     GUARD_CU(frontier.work_progress.GetQueueLength(
-//         frontier.queue_index, frontier.queue_length, false,
-//         oprtr_parameters.stream, false));
-
-
-
+      GUARD_CU(frontier.work_progress.GetQueueLength(
+        frontier.queue_index, frontier.queue_length, false,
+        oprtr_parameters.stream, true));
     return retval;
   }
 
-  bool Stop_Condition(int gpu_num = 0) {
-    auto &enactor_slice = this->enactor->enactor_slices[0];
-    auto &enactor_stats = enactor_slice.enactor_stats;
-    auto &data_slice = this->enactor->problem->data_slices[this->gpu_num][0];
-
-//     auto &retval = enactor_stats.retval;
-//     auto &oprtr_parameters = enactor_slice.oprtr_parameters;
-
-    auto &iter = enactor_stats.iteration;
-
-    auto &frontier = enactor_slice.frontier;
-
-
-    printf("GPU: %d In Stopping Condition: Frontier Size: %d\n", gpu_num, frontier.queue_length);
-    
-    // break if the frontier size is zero
-    if( frontier.queue_length == 0 ) {
-        return true;
-    }
-
-    return false;
-  }
 
   /**
    * @brief Routine to combine received data and local data
@@ -311,10 +271,6 @@ class Enactor
    * \return cudaError_t error message(s), if any
    */
   cudaError_t Release(util::Location target = util::LOCATION_ALL) {
-
-      printf("In Release\n");
-
-
     cudaError_t retval = cudaSuccess;
     GUARD_CU(BaseEnactor::Release(target));
     delete[] iterations;
@@ -330,9 +286,6 @@ class Enactor
    * \return cudaError_t error message(s), if any
    */
   cudaError_t Init(Problem &problem, util::Location target = util::DEVICE) {
-
-      printf("In Init\n");
-
     cudaError_t retval = cudaSuccess;
     this->problem = &problem;
 
@@ -367,8 +320,6 @@ class Enactor
    * \return cudaError_t error message(s), if any
    */
   cudaError_t Run(ThreadSlice &thread_data) {
-      printf("In Run\n");
-      
     gunrock::app::Iteration_Loop<
         // <OPEN> change to how many {VertexT, ValueT} data need to communicate
         //       per element in the inter-GPU sub-frontiers
@@ -394,7 +345,7 @@ class Enactor
     GUARD_CU(BaseEnactor::Reset(target));
 
 
-    printf("Resetting Enactor: num_gpus = %d Adding Src: %d Src Neighb: %d\n", this->num_gpus, src, src_neib);
+    // printf("Resetting Enactor: num_gpus = %d Adding Src: %d Src Neighb: %d\n", this->num_gpus, src, src_neib);
 
     // <DONE> Initialize frontiers according to the algorithm:
     // In this case, we add a `src` to the frontier
@@ -412,14 +363,6 @@ class Enactor
                   v[i] = src;
                 },
                 1, target, 0));
-
-            auto &data_slice = this->problem->data_slices[peer_][0];
-            auto &residual = data_slice.residual;
-
-            GUARD_CU(residual.ForAll([src] __host__ __device__(ValueT *x, const SizeT &pos) { x[src] = 1; }, 
-                                     1, target, 0));
-
-
           }
         }
       } else {
@@ -446,8 +389,6 @@ class Enactor
       // VertexT src = 0
       // </TODO>
   ) {
-      printf("In Enact\n");
-      
     cudaError_t retval = cudaSuccess;
     GUARD_CU(this->Run_Threads(this));
     util::PrintMsg("GPU Template Done.", this->flag & Debug);
