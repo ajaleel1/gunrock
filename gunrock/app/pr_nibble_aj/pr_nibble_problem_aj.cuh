@@ -64,14 +64,13 @@ struct Problem : ProblemBase<_GraphT, _FLAG> {
     util::Array1D<SizeT, ValueT> residual_prime;     // residual_prime
 
     VertexT src;        // Node to start local PR from
-    VertexT src_neib;   // Neighbor of reference node
     int num_ref_nodes;  // Number of source nodes (hardcoded to 1 for now)
 
     ValueT eps;    // Tolerance for convergence
     ValueT alpha;  // Parameterizes conductance/size of output cluster
     ValueT weight1;  // Parameterizes conductance/size of output cluster
     ValueT weight2;  // Parameterizes conductance/size of output cluster
-
+    bool   dense;    // run in dense mode
 
     int max_iter;  // Maximum number of iterations
 
@@ -120,10 +119,11 @@ struct Problem : ProblemBase<_GraphT, _FLAG> {
      * \return    cudaError_t Error message(s), if any
      */
     cudaError_t Init(GraphT &sub_graph, int num_gpus, int gpu_idx,
-                     util::Location target, ProblemFlag flag, ValueT _eps,
+                     util::Location target, ProblemFlag flag, ValueT _eps, bool _dense,
                      ValueT _alpha, int _max_iter) {
       cudaError_t retval = cudaSuccess;
-
+      
+      dense = _dense;
       eps = _eps;
       alpha = _alpha;
       max_iter = _max_iter;
@@ -149,17 +149,16 @@ struct Problem : ProblemBase<_GraphT, _FLAG> {
      * @brief Reset problem function. Must be called prior to each run.
      * @param[in] target      Targeting device location
      * @param[in] _src             Source node
-     * @param[in] _src_neib        Neighbor of source node (!! HACK)
      * @param[in] _num_ref_nodes   Number of source nodes (HARDCODED to 1
      * elsewhere) \return    cudaError_t Error message(s), if any
      */
-    cudaError_t Reset(VertexT _src, VertexT _src_neib, int _num_ref_nodes,
+    cudaError_t Reset(VertexT _src, 
+                      int _num_ref_nodes,
                       util::Location target = util::DEVICE) {
       cudaError_t retval = cudaSuccess;
       SizeT nodes = this->sub_graph->nodes;
 
       src = _src;
-      src_neib = _src_neib;
       num_ref_nodes = _num_ref_nodes;
 
       // Ensure data are allocated
@@ -190,6 +189,7 @@ struct Problem : ProblemBase<_GraphT, _FLAG> {
   util::Array1D<SizeT, DataSlice> *data_slices;
 
   int max_iter;
+  int dense;
   ValueT eps;
   ValueT alpha;
   ValueT weight1;  // Parameterizes conductance/size of output cluster
@@ -207,6 +207,7 @@ struct Problem : ProblemBase<_GraphT, _FLAG> {
     max_iter = _parameters.Get<int>("max-iter");
     eps = _parameters.Get<ValueT>("eps");
     alpha = _parameters.Get<ValueT>("alpha");
+    dense = _parameters.Get<int>("dense");
   }
 
   /**
@@ -336,9 +337,9 @@ struct Problem : ProblemBase<_GraphT, _FLAG> {
     ValueT num_edges = (ValueT)graph.edges / 2.0;
     ValueT log_num_edges = log2(num_edges);
 
-    // alpha
-    this->alpha = 0.15;
-    this->eps   = (double)1e-9;
+//     // alpha
+//     this->alpha = 0.15;
+//     this->eps   = (double)1e-6;
 
     this->weight1 = (2*this->alpha) / (1+this->alpha);
     this->weight2 = (1-this->alpha) / (1+this->alpha);
@@ -354,7 +355,7 @@ struct Problem : ProblemBase<_GraphT, _FLAG> {
       auto &data_slice = data_slices[gpu][0];
       GUARD_CU(data_slice.Init(
           this->sub_graphs[gpu], this->num_gpus, this->gpu_idx[gpu], target,
-          this->flag, this->eps, this->alpha, this->max_iter));
+          this->flag, this->eps, this->dense, this->alpha, this->max_iter));
     }
 
     return retval;
@@ -363,11 +364,10 @@ struct Problem : ProblemBase<_GraphT, _FLAG> {
   /**
    * @brief Reset problem function. Must be called prior to each run.
    * @param[in] src       Source vertex
-   * @param[in] src_neib  Source vertex neighbor (!! HACK)
    * @param[in] location Memory location to work on
    * \return cudaError_t Error message(s), if any
    */
-  cudaError_t Reset(VertexT src, VertexT src_neib,
+  cudaError_t Reset(VertexT src, 
                     util::Location target = util::DEVICE) {
     cudaError_t retval = cudaSuccess;
 
@@ -376,7 +376,7 @@ struct Problem : ProblemBase<_GraphT, _FLAG> {
     // Reset data slices
     for (int gpu = 0; gpu < this->num_gpus; ++gpu) {
       if (target & util::DEVICE) GUARD_CU(util::SetDevice(this->gpu_idx[gpu]));
-      GUARD_CU(data_slices[gpu]->Reset(src, src_neib, num_ref_nodes, target));
+      GUARD_CU(data_slices[gpu]->Reset(src, num_ref_nodes, target));
       GUARD_CU(data_slices[gpu].Move(util::HOST, target));
     }
 
