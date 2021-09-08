@@ -13,6 +13,7 @@
 
 #include <gunrock/gunrock.h>
 #include <gunrock/util/test_utils.cuh>
+#include <gunrock/util/shared_utils.cuh>
 #include <gunrock/graphio/graphio.cuh>
 #include <gunrock/app/app_base.cuh>
 #include <gunrock/app/test_base.cuh>
@@ -44,16 +45,28 @@ cudaError_t UseParameters(util::Parameters &parameters) {
       "eps",
       util::REQUIRED_ARGUMENT | util::SINGLE_VALUE | util::OPTIONAL_PARAMETER,
       1e-9, "epsilon parameter.", __FILE__, __LINE__));
+
+  GUARD_CU(parameters.Use<int>(
+      "dense",
+      util::REQUIRED_ARGUMENT | util::SINGLE_VALUE | util::OPTIONAL_PARAMETER,
+      0, "perform dense computation on vector.", __FILE__, __LINE__));
+
   GUARD_CU(parameters.Use<double>(
       "alpha",
       util::REQUIRED_ARGUMENT | util::SINGLE_VALUE | util::OPTIONAL_PARAMETER,
       0.15,
       "alpha parameter",  // <TODO: DOCS>
       __FILE__, __LINE__));
+
   GUARD_CU(parameters.Use<int>(
       "max-iter",
       util::REQUIRED_ARGUMENT | util::SINGLE_VALUE | util::OPTIONAL_PARAMETER,
       1000, "Max number of iterations", __FILE__, __LINE__));
+
+  GUARD_CU(parameters.Use<int>(
+      "max-seed",
+      util::REQUIRED_ARGUMENT | util::SINGLE_VALUE | util::OPTIONAL_PARAMETER,
+      50, "Max number of seeds", __FILE__, __LINE__));
 
   return retval;
 }
@@ -90,8 +103,7 @@ cudaError_t RunTests(util::Parameters &parameters, GraphT &graph,
   cpu_timer.Start();
   total_timer.Start();
 
-  std::vector<VertexT> srcs = parameters.Get<std::vector<VertexT>>("srcs");
-  int num_srcs = srcs.size();
+  int max_seed = parameters.Get<int>("max-seed");
 
   ValueT *h_values = new ValueT[graph.nodes];
 
@@ -106,36 +118,34 @@ cudaError_t RunTests(util::Parameters &parameters, GraphT &graph,
   cpu_timer.Stop();
   parameters.Set("preprocess-time", cpu_timer.ElapsedMillis());
 
-  for (int run_num = 0; run_num < num_runs; ++run_num) {
-    auto run_index = run_num % num_srcs;
-    VertexT src = srcs[run_index];
-    VertexT src_neib = graph.GetEdgeDest(graph.GetNeighborListOffset(src));
+  for (int seed = 0; seed<max_seed; ++seed) {
 
+    VertexT src = seed;
 
-    GUARD_CU(problem.Reset(src, src_neib, target));
+    GUARD_CU(problem.Reset(src, target));
+    GUARD_CU(enactor.Reset(src, target));
 
-    GUARD_CU(enactor.Reset(src, src_neib, target));
 
     util::PrintMsg("__________________________", !quiet_mode);
 
     cpu_timer.Start();
 
-    printf("Calling Enactor\n");
     GUARD_CU(enactor.Enact());
     cpu_timer.Stop();
     info.CollectSingleRun(cpu_timer.ElapsedMillis());
 
     util::PrintMsg(
-        "--------------------------\nRun " + std::to_string(run_num) +
+        "--------------------------\nSeed " + std::to_string(seed) +
             " elapsed: " + std::to_string(cpu_timer.ElapsedMillis()) +
             ", #iterations = " +
             std::to_string(enactor.enactor_slices[0].enactor_stats.iteration),
         !quiet_mode);
 
     if (validation == "each") {
+      printf("Validating Each...\n");
       GUARD_CU(problem.Extract(h_values));
       SizeT num_errors = Validate_Results(parameters, graph, h_values,
-                                          ref_values[run_index], false);
+                                          ref_values[seed], false);
     }
   }
 
@@ -143,7 +153,8 @@ cudaError_t RunTests(util::Parameters &parameters, GraphT &graph,
 
   GUARD_CU(problem.Extract(h_values));
   if (validation == "last") {
-    auto run_index = (num_runs - 1) % num_srcs;
+    printf("Validating Last...\n");
+    auto run_index = max_seed-1;
     SizeT num_errors = Validate_Results(parameters, graph, h_values,
                                         ref_values[run_index], false);
   }
@@ -152,9 +163,9 @@ cudaError_t RunTests(util::Parameters &parameters, GraphT &graph,
   // <TODO> change NULL to problem specific per-vertex visited marker, e.g.
   // h_distances info.ComputeTraversalStats(enactor, (VertexT*)NULL);
   // Display_Memory_Usage(problem);
-  // #ifdef ENABLE_PERFORMANCE_PROFILING
-  // Display_Performance_Profiling(enactor);
-  // #endif
+#ifdef ENABLE_PERFORMANCE_PROFILING
+  Display_Performance_Profiling(&enactor);
+#endif
   // </TODO>
 
   // Clean up
@@ -208,9 +219,10 @@ double gunrock_pr_nibble(gunrock::util::Parameters &parameters, GraphT &graph,
     auto run_index = run_num % num_srcs;
 
     VertexT src = srcs[run_index];
-    VertexT src_neib = graph.GetEdgeDest(graph.GetNeighborListOffset(src));
-    problem.Reset(src, src_neib, target);
-    enactor.Reset(src, src_neib, target);
+
+    problem.Reset(src, target);
+    enactor.Reset(src, target);
+
 
     cpu_timer.Start();
     enactor.Enact();

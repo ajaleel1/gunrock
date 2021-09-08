@@ -62,7 +62,6 @@ struct PRNibbleIterationLoop
   cudaError_t Core(int peer_ = 0) {
     // --
     // Alias variables
-
     auto &data_slice = this->enactor->problem->data_slices[this->gpu_num][0];
 
     auto &enactor_slice =
@@ -75,6 +74,8 @@ struct PRNibbleIterationLoop
     auto &oprtr_parameters = enactor_slice.oprtr_parameters;
     auto &retval = enactor_stats.retval;
     auto &iteration = enactor_stats.iteration;
+    auto &max_iteration = data_slice.max_iter;
+    
 
     // problem specific data alias
     auto &pageRank = data_slice.pageRank;
@@ -84,9 +85,9 @@ struct PRNibbleIterationLoop
     auto &alpha = data_slice.alpha;
     auto &epsilon = data_slice.eps;
     auto &max_iter = data_slice.max_iter;
-
+    auto &dense    = data_slice.dense;
+    
     auto &src_node = data_slice.src;
-    auto &src_neib = data_slice.src_neib;
     auto &num_ref_nodes = data_slice.num_ref_nodes;
 
     auto weight1 = data_slice.weight1;
@@ -104,8 +105,7 @@ struct PRNibbleIterationLoop
 
         auto v_idx = v[i];
 
-        //ValueT update_val = weight1 * Load<cub::LOAD_CG>(residual+v_idx); 
-        auto update_val = weight1 * residual[v_idx]; 
+        ValueT update_val = weight1 * Load<cub::LOAD_CG>(residual+v_idx); 
         atomicAdd(pageRank+v_idx, update_val);
         
         residual_prime[v_idx] = 0;
@@ -123,16 +123,15 @@ struct PRNibbleIterationLoop
             SizeT &output_pos) -> bool {
 
         auto num_neighbors = graph.CsrT::GetNeighborListLength(src);
-        // auto update_val  = weight2 * Load<cub::LOAD_CG>(residual+src) / num_neighbors;
-        auto update_val  = weight2 * residual[src] / num_neighbors;
+        auto update_val  = weight2 * Load<cub::LOAD_CG>(residual+src) / num_neighbors;
         atomicAdd(residual_prime + dest, update_val);
 
-        // printf("-- Advance -- Src: %d Dest: %d Num Neighbors: %d Update Val: %lf\n", src, dest, num_neighbors, update_val);
+//         printf("-- Advance -- Src: %d Dest: %d Num Neighbors: %d Update Val: %lf\n", src, dest, num_neighbors, update_val);
 	return true;
     };
 
     // filter operation
-    auto filter_op = [graph, epsilon, residual, residual_prime] __host__ __device__(
+    auto filter_op = [graph, epsilon, residual, residual_prime, iteration, max_iteration, dense] __host__ __device__(
                          const VertexT &src, VertexT &dest,
                          const SizeT &edge_id, const VertexT &input_item,
                          const SizeT &input_pos,
@@ -140,9 +139,8 @@ struct PRNibbleIterationLoop
 
         auto num_neighbors = graph.CsrT::GetNeighborListLength(dest);
         residual[dest] = residual_prime[dest];
-        double myepsilon = 1e-9;
 
-        if(num_neighbors && ((double)residual[dest] >= (double)(num_neighbors * myepsilon))) {
+        if(dense || (num_neighbors && ((double)residual[dest] >= (double)(num_neighbors * epsilon))) ) {
             return true;
         }
 
@@ -170,7 +168,7 @@ struct PRNibbleIterationLoop
     
     // printf("Populate frontier -- Frontier Size: %d\n", frontier.queue_length);
 
-    frontier.queue_reset = true;
+//     frontier.queue_reset = true;
     GUARD_CU(oprtr::Filter<oprtr::OprtrType_V2V>(
           graph.csr(), frontier.V_Q(), frontier.Next_V_Q(), oprtr_parameters,
           filter_op));
@@ -185,7 +183,6 @@ struct PRNibbleIterationLoop
 
     return retval;
   }
-
 
   /**
    * @brief Routine to combine received data and local data
@@ -229,6 +226,26 @@ struct PRNibbleIterationLoop
             received_length, peer_, expand_op);
     return retval;
   }
+    
+
+  bool Stop_Condition(int gpu_num = 0) {
+
+    auto &enactor_slice = this->enactor->enactor_slices[0];
+    auto &enactor_stats = enactor_slice.enactor_stats;
+    auto &data_slice = this->enactor->problem->data_slices[this->gpu_num][0];
+    auto &iter = enactor_stats.iteration;
+
+    bool done = All_Done(this->enactor[0], this->gpu_num);
+    bool done_iter = iter >= data_slice.max_iter;
+
+    if( done || done_iter ) {
+        return true;
+    }
+
+    return false;
+  }
+  
+
 };  // end of PRNibbleIterationLoop
 
 /**
@@ -346,7 +363,7 @@ class Enactor
    */
   cudaError_t Reset(
       // <DONE> problem specific data if necessary, eg
-      VertexT src, VertexT src_neib,
+      VertexT src, 
       // </DONE>
       util::Location target = util::DEVICE) {
     typedef typename GraphT::GpT GpT;
@@ -354,7 +371,7 @@ class Enactor
     GUARD_CU(BaseEnactor::Reset(target));
 
 
-    // printf("Resetting Enactor: num_gpus = %d Adding Src: %d Src Neighb: %d\n", this->num_gpus, src, src_neib);
+    // printf("Resetting Enactor: num_gpus = %d Adding Src: %d Src Neighb: %d\n", this->num_gpus, src);
 
     // <DONE> Initialize frontiers according to the algorithm:
     // In this case, we add a `src` to the frontier

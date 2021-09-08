@@ -60,16 +60,16 @@ struct main_struct {
 
     // Problem specific variables
     GUARD_CU(app::Set_Srcs(parameters, graph));
-    std::vector<VertexT> srcs = parameters.Get<std::vector<VertexT> >("srcs");
-    int num_srcs = srcs.size();
+
+    int num_seeds = parameters.Get<int>("max-seed");
 
     ValueT **ref_values = NULL;
 
     if (!quick) {
-      ref_values = new ValueT *[num_srcs];
+      ref_values = new ValueT *[num_seeds];
 
-      for (int i = 0; i < num_srcs; i++) {
-        VertexT src = srcs[i];
+      for (int i = 0; i < num_seeds; i++) {
+        VertexT src = i;
         ref_values[i] = new ValueT[graph.nodes];
 
         util::PrintMsg("__________________________", !quiet);
@@ -93,7 +93,7 @@ struct main_struct {
         }));
 
     if (!quick) {
-      for (int i = 0; i < num_srcs; i++) {
+      for (int i = 0; i < num_seeds; i++) {
         delete[] ref_values[i];
         ref_values[i] = NULL;
       }
