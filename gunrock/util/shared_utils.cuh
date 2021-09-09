@@ -108,21 +108,21 @@ void Display_Performance_Profiling(Enactor *enactor) {
 
       for (int peer = 0; peer < num_gpus; peer++) {
         std::vector<SizeT> &iter_in_length =
-            enactor->enactor_stats[gpu * num_gpus + peer].iter_in_length[i];
+            enactor->enactor_slices[gpu * num_gpus + peer].enactor_stats.iter_in_length[i];
         if (iter_in_length.size() != 0) {
           V2Str(iter_in_length, str);
           printf("%d\t %d\t In length %d\t %s\n", i, gpu, peer, str.c_str());
         }
 
         std::vector<SizeT> &iter_nodes_queued =
-            enactor->enactor_stats[gpu * num_gpus + peer].iter_nodes_queued[i];
+            enactor->enactor_slices[gpu * num_gpus + peer].enactor_stats.iter_nodes_queued[i];
         if (iter_nodes_queued.size() != 0) {
           V2Str(iter_nodes_queued, str);
           printf("%d\t %d\t Nodes queued %d\t %s\n", i, gpu, peer, str.c_str());
         }
 
         std::vector<SizeT> &iter_edges_queued =
-            enactor->enactor_stats[gpu * num_gpus + peer].iter_edges_queued[i];
+            enactor->enactor_slices[gpu * num_gpus + peer].enactor_stats.iter_edges_queued[i];
         if (iter_edges_queued.size() != 0) {
           V2Str(iter_edges_queued, str);
           printf("%d\t %d\t Edges queued %d\t %s\n", i, gpu, peer, str.c_str());
@@ -140,21 +140,21 @@ void Display_Performance_Profiling(Enactor *enactor) {
           enactor->iter_full_queue_nodes_queued[gpu][i];
       if (iter_full_queue_nodes_queued.size() != 0) {
         V2Str(iter_full_queue_nodes_queued, str);
-        printf("%d\t %d\t Fu-queue nodes\t %s\n", i, gpu, str.c_str());
+        printf("%d\t %d\t full-queue nodes\t %s\n", i, gpu, str.c_str());
       }
 
       std::vector<SizeT> &iter_full_queue_edges_queued =
           enactor->iter_full_queue_edges_queued[gpu][i];
       if (iter_full_queue_edges_queued.size() != 0) {
         V2Str(iter_full_queue_edges_queued, str);
-        printf("%d\t %d\t Fu-queue edges\t %s\n", i, gpu, str.c_str());
+        printf("%d\t %d\t full-queue edges\t %s\n", i, gpu, str.c_str());
       }
 
       std::vector<double> &iter_full_queue_time =
           enactor->iter_full_queue_time[gpu][i];
       if (iter_full_queue_time.size() != 0) {
         V2Str(iter_full_queue_time, str);
-        printf("%d\t %d\t Fu-queue time\t %s\n", i, gpu, str.c_str());
+        printf("%d\t %d\t full-queue time\t %s\n", i, gpu, str.c_str());
       }
 
       std::vector<double> &iter_total_time = enactor->iter_total_time[gpu][i];
@@ -177,7 +177,7 @@ void Display_Performance_Profiling(Enactor *enactor) {
 
       for (int peer = 0; peer < num_gpus; peer++) {
         std::vector<SizeT> &iter_out_length =
-            enactor->enactor_stats[gpu * num_gpus + peer].iter_out_length[i];
+            enactor->enactor_slices[gpu * num_gpus + peer].enactor_stats.iter_out_length[i];
         if (iter_out_length.size() != 0) {
           V2Str(iter_out_length, str);
           printf("%d\t %d\t Out length %d\t %s\n", i, gpu, peer, str.c_str());
