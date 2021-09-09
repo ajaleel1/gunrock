@@ -1,6 +1,6 @@
-This implementation of PR-Nibble is from the DARPA Software Defined
-Hardware (SDH) program. The algorithm is is based on the following
-paper by Shun et al.
+This PR-Nibble implementation by (Aamer Jaleel <ajaleel@nvidia.com>)
+is from the DARPA Software Defined Hardware (SDH) program. The
+algorithm is is based on the following paper by Shun et al.
 
 @article{DBLP:journals/corr/ShunRFM16,
   author    = {Julian Shun and
