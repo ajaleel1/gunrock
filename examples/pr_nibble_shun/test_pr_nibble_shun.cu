@@ -13,12 +13,12 @@
  */
 
 #include <iostream>
-#include <gunrock/app/pr_nibble_aj/pr_nibble_app_aj.cu>
+#include <gunrock/app/pr_nibble_shun/pr_nibble_app_shun.cu>
 #include <gunrock/app/test_base.cuh>
 
 using namespace gunrock;
 
-namespace APP_NAMESPACE = app::pr_nibble_aj;
+namespace APP_NAMESPACE = app::pr_nibble_shun;
 
 /******************************************************************************
  * Main
@@ -74,7 +74,7 @@ struct main_struct {
 
         util::PrintMsg("__________________________", !quiet);
 
-        float elapsed = app::pr_nibble_aj::CPU_Reference(
+        float elapsed = app::pr_nibble_shun::CPU_Reference(
             graph.csr(), parameters, src, ref_values[i], quiet);
 
         util::PrintMsg(
@@ -88,7 +88,7 @@ struct main_struct {
     GUARD_CU(app::Switch_Parameters(
         parameters, graph, switches,
         [ref_values](util::Parameters &parameters, GraphT &graph) {
-          return app::pr_nibble_aj::RunTests(parameters, graph, ref_values,
+          return app::pr_nibble_shun::RunTests(parameters, graph, ref_values,
                                           util::DEVICE);
         }));
 
@@ -106,9 +106,9 @@ struct main_struct {
 
 int main(int argc, char **argv) {
   cudaError_t retval = cudaSuccess;
-  util::Parameters parameters("test pr_nibble_aj");
+  util::Parameters parameters("test pr_nibble_shun");
   GUARD_CU(graphio::UseParameters(parameters));
-  GUARD_CU(app::pr_nibble_aj::UseParameters(parameters));
+  GUARD_CU(app::pr_nibble_shun::UseParameters(parameters));
   GUARD_CU(app::UseParameters_test(parameters));
   GUARD_CU(parameters.Parse_CommandLine(argc, argv));
   if (parameters.Get<bool>("help")) {
